@@ -1,0 +1,10 @@
+**
+!Dockerfile.service
+!services/
+services/**
+!services/*/
+!services/*/target/
+!services/*/target/*.jar
+**/cdk.out/
+**/node_modules/
+**/.git/

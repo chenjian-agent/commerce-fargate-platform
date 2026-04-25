@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.6</version>
+        <relativePath/>
+    </parent>
+    <groupId>com.example.commerce</groupId>
+    <artifactId>commerce-fargate-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>commerce-fargate-platform</name>
+
+    <modules>
+        <module>services/auth</module>
+        <module>services/product</module>
+        <module>services/buy</module>
+        <module>services/payment</module>
+        <module>services/order-mgmt</module>
+        <module>services/inventory-mgmt</module>
+        <module>services/cart</module>
+        <module>services/customer</module>
+        <module>services/shipping</module>
+        <module>services/notification</module>
+    </modules>
+
+    <properties>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+    </properties>
+</project>
