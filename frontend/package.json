@@ -1,0 +1,13 @@
+{
+  "name": "commerce-auth-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.800.0",
+    "express": "^5.1.0"
+  }
+}

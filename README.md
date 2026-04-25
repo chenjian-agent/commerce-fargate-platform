@@ -23,6 +23,9 @@ Two CDK apps are provided:
 
 - `cdk/infra`: VPC, ECS cluster, Cloud Map namespace, internal ALB, and API Gateway.
 - `cdk/services`: ECR repositories, task definitions, log groups, service target groups, ALB listener rules, and ECS Fargate services. Desired count defaults to `0`.
+- `cdk/frontend`: Tokyo-region public ALB plus ECS Fargate frontend. The frontend signs users in through Cognito and calls the API Gateway with a JWT.
+
+North-south auth is enforced at API Gateway with a Cognito JWT authorizer. `/api/auth` stays public; the other `/api/{service}` routes require `Authorization: Bearer <id-token>`.
 
 ## Build
 
@@ -42,11 +45,42 @@ npx cdk deploy --profile aws-4 --region ap-northeast-2 \
 cd ../services
 npm ci
 npx cdk deploy --profile aws-4 --region ap-northeast-2 --require-approval never
+
+cd ../frontend
+npm ci
+npx cdk deploy --profile aws-4 --region ap-northeast-1 \
+  -c apiBaseUrl=https://apigw.chen-siyi.dev \
+  -c cognitoUserPoolId=<CognitoUserPoolId> \
+  -c cognitoClientId=<CognitoUserPoolClientId> \
+  -c cognitoRegion=ap-northeast-2 \
+  --require-approval never
 ```
 
 The external-DNS HTTP API custom domain is `api.nike.gcp.chen-siyi.com`. Create or import an ACM certificate for that exact name in `ap-northeast-2`, then point DNS to the `CustomDomainRegionalDomainName` stack output. If DNS is outside Route 53, use a CNAME.
 
 The Route 53-managed HTTP API custom domain is `apigw.chen-siyi.dev`. CDK creates the ACM DNS validation certificate and an alias record in hosted zone `Z0802721MWAP71YTS7SZ`.
+
+## Demo User
+
+Create a Cognito user for the frontend:
+
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id <CognitoUserPoolId> \
+  --username demo-user \
+  --user-attributes Name=email,Value=demo@example.com Name=email_verified,Value=true \
+  --message-action SUPPRESS \
+  --profile aws-4 \
+  --region ap-northeast-2
+
+aws cognito-idp admin-set-user-password \
+  --user-pool-id <CognitoUserPoolId> \
+  --username demo-user \
+  --password 'DemoPass1234' \
+  --permanent \
+  --profile aws-4 \
+  --region ap-northeast-2
+```
 
 ## Local Smoke Test
 

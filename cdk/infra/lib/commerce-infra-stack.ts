@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
@@ -89,7 +90,57 @@ export class CommerceInfraStack extends cdk.Stack {
 
     const httpApi = new apigwv2.CfnApi(this, 'HttpApi', {
       name: 'commerce-http-api',
-      protocolType: 'HTTP'
+      protocolType: 'HTTP',
+      corsConfiguration: {
+        allowCredentials: false,
+        allowHeaders: ['authorization', 'content-type'],
+        allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowOrigins: ['*'],
+        maxAge: 3600
+      }
+    });
+
+    const userPool = new cognito.UserPool(this, 'NorthSouthUserPool', {
+      userPoolName: 'commerce-north-south-users',
+      selfSignUpEnabled: false,
+      signInAliases: {
+        email: true,
+        username: true
+      },
+      passwordPolicy: {
+        minLength: 10,
+        requireDigits: true,
+        requireLowercase: true,
+        requireSymbols: false,
+        requireUppercase: true
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      removalPolicy: cdk.RemovalPolicy.RETAIN
+    });
+
+    const userPoolClient = new cognito.UserPoolClient(this, 'NorthSouthUserPoolClient', {
+      userPool,
+      userPoolClientName: 'commerce-frontend-client',
+      generateSecret: false,
+      authFlows: {
+        adminUserPassword: true,
+        userPassword: true
+      },
+      preventUserExistenceErrors: true,
+      accessTokenValidity: cdk.Duration.hours(1),
+      idTokenValidity: cdk.Duration.hours(1),
+      refreshTokenValidity: cdk.Duration.days(30)
+    });
+
+    const jwtAuthorizer = new apigwv2.CfnAuthorizer(this, 'NorthSouthJwtAuthorizer', {
+      apiId: httpApi.ref,
+      authorizerType: 'JWT',
+      name: 'commerce-cognito-jwt-authorizer',
+      identitySource: ['$request.header.Authorization'],
+      jwtConfiguration: {
+        audience: [userPoolClient.userPoolClientId],
+        issuer: `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`
+      }
     });
 
     const integration = new apigwv2.CfnIntegration(this, 'AlbIntegration', {
@@ -103,15 +154,25 @@ export class CommerceInfraStack extends cdk.Stack {
     });
 
     for (const service of services) {
+      const protectedRouteProps =
+        service === 'auth'
+          ? {}
+          : {
+              authorizationType: 'JWT',
+              authorizerId: jwtAuthorizer.ref
+            };
+
       new apigwv2.CfnRoute(this, `${pascal(service)}Route`, {
         apiId: httpApi.ref,
         routeKey: `ANY /api/${service}/{proxy+}`,
-        target: `integrations/${integration.ref}`
+        target: `integrations/${integration.ref}`,
+        ...protectedRouteProps
       });
       new apigwv2.CfnRoute(this, `${pascal(service)}RootRoute`, {
         apiId: httpApi.ref,
         routeKey: `ANY /api/${service}`,
-        target: `integrations/${integration.ref}`
+        target: `integrations/${integration.ref}`,
+        ...protectedRouteProps
       });
     }
 
@@ -206,6 +267,22 @@ export class CommerceInfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'HttpApiUrl', {
       exportName: 'commerce-http-api-url',
       value: httpApi.attrApiEndpoint
+    });
+    new cdk.CfnOutput(this, 'CognitoUserPoolId', {
+      exportName: 'commerce-cognito-user-pool-id',
+      value: userPool.userPoolId
+    });
+    new cdk.CfnOutput(this, 'CognitoUserPoolArn', {
+      exportName: 'commerce-cognito-user-pool-arn',
+      value: userPool.userPoolArn
+    });
+    new cdk.CfnOutput(this, 'CognitoUserPoolClientId', {
+      exportName: 'commerce-cognito-user-pool-client-id',
+      value: userPoolClient.userPoolClientId
+    });
+    new cdk.CfnOutput(this, 'CognitoIssuer', {
+      exportName: 'commerce-cognito-issuer',
+      value: `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`
     });
     new cdk.CfnOutput(this, 'CustomDomainUrl', {
       exportName: 'commerce-custom-domain-url',
