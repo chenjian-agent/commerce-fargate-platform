@@ -35,12 +35,16 @@ mvn clean package
 ```bash
 cd cdk/infra
 npm ci
-npx cdk deploy --profile aws-4 --region ap-northeast-2 --require-approval never
+npx cdk deploy --profile aws-4 --region ap-northeast-2 \
+  -c customDomainCertificateArn=arn:aws:acm:ap-northeast-2:379810014062:certificate/... \
+  --require-approval never
 
 cd ../services
 npm ci
 npx cdk deploy --profile aws-4 --region ap-northeast-2 --require-approval never
 ```
+
+The HTTP API custom domain is `api.nike.gcp.chen-siyi.com`. Create or import an ACM certificate for that exact name in `ap-northeast-2`, then point DNS to the `CustomDomainRegionalDomainName` stack output. If DNS is outside Route 53, use a CNAME.
 
 ## Local Smoke Test
 

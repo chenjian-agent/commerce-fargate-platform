@@ -19,6 +19,8 @@ const services = [
   'notification'
 ];
 
+const customDomainName = 'api.nike.gcp.chen-siyi.com';
+
 export class CommerceInfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -109,10 +111,35 @@ export class CommerceInfraStack extends cdk.Stack {
       });
     }
 
-    new apigwv2.CfnStage(this, 'DefaultStage', {
+    const defaultStage = new apigwv2.CfnStage(this, 'DefaultStage', {
       apiId: httpApi.ref,
       stageName: '$default',
       autoDeploy: true
+    });
+
+    const customDomainCertificateArn = this.node.tryGetContext('customDomainCertificateArn');
+    if (typeof customDomainCertificateArn !== 'string' || customDomainCertificateArn.length === 0) {
+      throw new Error(
+        `Pass an ACM certificate ARN for ${customDomainName} with ` +
+          '-c customDomainCertificateArn=arn:aws:acm:ap-northeast-2:...:certificate/...'
+      );
+    }
+
+    const customDomain = new apigwv2.CfnDomainName(this, 'HttpApiCustomDomain', {
+      domainName: customDomainName,
+      domainNameConfigurations: [
+        {
+          certificateArn: customDomainCertificateArn,
+          endpointType: 'REGIONAL',
+          securityPolicy: 'TLS_1_2'
+        }
+      ]
+    });
+
+    new apigwv2.CfnApiMapping(this, 'HttpApiCustomDomainMapping', {
+      apiId: httpApi.ref,
+      domainName: customDomain.ref,
+      stage: defaultStage.stageName
     });
 
     new cdk.CfnOutput(this, 'VpcId', { exportName: 'commerce-vpc-id', value: vpc.vpcId });
@@ -138,6 +165,18 @@ export class CommerceInfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'HttpApiUrl', {
       exportName: 'commerce-http-api-url',
       value: httpApi.attrApiEndpoint
+    });
+    new cdk.CfnOutput(this, 'CustomDomainUrl', {
+      exportName: 'commerce-custom-domain-url',
+      value: `https://${customDomainName}`
+    });
+    new cdk.CfnOutput(this, 'CustomDomainRegionalDomainName', {
+      exportName: 'commerce-custom-domain-regional-domain-name',
+      value: customDomain.attrRegionalDomainName
+    });
+    new cdk.CfnOutput(this, 'CustomDomainRegionalHostedZoneId', {
+      exportName: 'commerce-custom-domain-regional-hosted-zone-id',
+      value: customDomain.attrRegionalHostedZoneId
     });
   }
 }
