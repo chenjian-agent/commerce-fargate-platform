@@ -1,9 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
 
 const services = [
@@ -19,7 +21,9 @@ const services = [
   'notification'
 ];
 
-const customDomainName = 'api.nike.gcp.chen-siyi.com';
+const externalCustomDomainName = 'api.nike.gcp.chen-siyi.com';
+const route53CustomDomainName = 'apigw.chen-siyi.dev';
+const route53CustomDomainHostedZoneId = 'Z0802721MWAP71YTS7SZ';
 
 export class CommerceInfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -117,19 +121,19 @@ export class CommerceInfraStack extends cdk.Stack {
       autoDeploy: true
     });
 
-    const customDomainCertificateArn = this.node.tryGetContext('customDomainCertificateArn');
-    if (typeof customDomainCertificateArn !== 'string' || customDomainCertificateArn.length === 0) {
+    const externalCustomDomainCertificateArn = this.node.tryGetContext('customDomainCertificateArn');
+    if (typeof externalCustomDomainCertificateArn !== 'string' || externalCustomDomainCertificateArn.length === 0) {
       throw new Error(
-        `Pass an ACM certificate ARN for ${customDomainName} with ` +
+        `Pass an ACM certificate ARN for ${externalCustomDomainName} with ` +
           '-c customDomainCertificateArn=arn:aws:acm:ap-northeast-2:...:certificate/...'
       );
     }
 
-    const customDomain = new apigwv2.CfnDomainName(this, 'HttpApiCustomDomain', {
-      domainName: customDomainName,
+    const externalCustomDomain = new apigwv2.CfnDomainName(this, 'HttpApiCustomDomain', {
+      domainName: externalCustomDomainName,
       domainNameConfigurations: [
         {
-          certificateArn: customDomainCertificateArn,
+          certificateArn: externalCustomDomainCertificateArn,
           endpointType: 'REGIONAL',
           securityPolicy: 'TLS_1_2'
         }
@@ -138,8 +142,45 @@ export class CommerceInfraStack extends cdk.Stack {
 
     new apigwv2.CfnApiMapping(this, 'HttpApiCustomDomainMapping', {
       apiId: httpApi.ref,
-      domainName: customDomain.ref,
+      domainName: externalCustomDomain.ref,
       stage: defaultStage.stageName
+    });
+
+    const route53HostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'Route53CustomDomainHostedZone', {
+      hostedZoneId: route53CustomDomainHostedZoneId,
+      zoneName: route53CustomDomainName
+    });
+
+    const route53CustomDomainCertificate = new acm.Certificate(this, 'Route53CustomDomainCertificate', {
+      domainName: route53CustomDomainName,
+      validation: acm.CertificateValidation.fromDns(route53HostedZone)
+    });
+
+    const route53CustomDomain = new apigwv2.CfnDomainName(this, 'Route53HttpApiCustomDomain', {
+      domainName: route53CustomDomainName,
+      domainNameConfigurations: [
+        {
+          certificateArn: route53CustomDomainCertificate.certificateArn,
+          endpointType: 'REGIONAL',
+          securityPolicy: 'TLS_1_2'
+        }
+      ]
+    });
+
+    new apigwv2.CfnApiMapping(this, 'Route53HttpApiCustomDomainMapping', {
+      apiId: httpApi.ref,
+      domainName: route53CustomDomain.ref,
+      stage: defaultStage.stageName
+    });
+
+    new route53.CfnRecordSet(this, 'Route53HttpApiCustomDomainAliasRecord', {
+      hostedZoneId: route53CustomDomainHostedZoneId,
+      name: route53CustomDomainName,
+      type: 'A',
+      aliasTarget: {
+        dnsName: route53CustomDomain.attrRegionalDomainName,
+        hostedZoneId: route53CustomDomain.attrRegionalHostedZoneId
+      }
     });
 
     new cdk.CfnOutput(this, 'VpcId', { exportName: 'commerce-vpc-id', value: vpc.vpcId });
@@ -168,15 +209,27 @@ export class CommerceInfraStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'CustomDomainUrl', {
       exportName: 'commerce-custom-domain-url',
-      value: `https://${customDomainName}`
+      value: `https://${externalCustomDomainName}`
     });
     new cdk.CfnOutput(this, 'CustomDomainRegionalDomainName', {
       exportName: 'commerce-custom-domain-regional-domain-name',
-      value: customDomain.attrRegionalDomainName
+      value: externalCustomDomain.attrRegionalDomainName
     });
     new cdk.CfnOutput(this, 'CustomDomainRegionalHostedZoneId', {
       exportName: 'commerce-custom-domain-regional-hosted-zone-id',
-      value: customDomain.attrRegionalHostedZoneId
+      value: externalCustomDomain.attrRegionalHostedZoneId
+    });
+    new cdk.CfnOutput(this, 'Route53CustomDomainUrl', {
+      exportName: 'commerce-route53-custom-domain-url',
+      value: `https://${route53CustomDomainName}`
+    });
+    new cdk.CfnOutput(this, 'Route53CustomDomainRegionalDomainName', {
+      exportName: 'commerce-route53-custom-domain-regional-domain-name',
+      value: route53CustomDomain.attrRegionalDomainName
+    });
+    new cdk.CfnOutput(this, 'Route53CustomDomainRegionalHostedZoneId', {
+      exportName: 'commerce-route53-custom-domain-regional-hosted-zone-id',
+      value: route53CustomDomain.attrRegionalHostedZoneId
     });
   }
 }

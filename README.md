@@ -44,7 +44,9 @@ npm ci
 npx cdk deploy --profile aws-4 --region ap-northeast-2 --require-approval never
 ```
 
-The HTTP API custom domain is `api.nike.gcp.chen-siyi.com`. Create or import an ACM certificate for that exact name in `ap-northeast-2`, then point DNS to the `CustomDomainRegionalDomainName` stack output. If DNS is outside Route 53, use a CNAME.
+The external-DNS HTTP API custom domain is `api.nike.gcp.chen-siyi.com`. Create or import an ACM certificate for that exact name in `ap-northeast-2`, then point DNS to the `CustomDomainRegionalDomainName` stack output. If DNS is outside Route 53, use a CNAME.
+
+The Route 53-managed HTTP API custom domain is `apigw.chen-siyi.dev`. CDK creates the ACM DNS validation certificate and an alias record in hosted zone `Z0802721MWAP71YTS7SZ`.
 
 ## Local Smoke Test
 
